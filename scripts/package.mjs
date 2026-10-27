@@ -4,6 +4,7 @@
 //
 // The build happens in a temp folder: ~/Documents may be synced by iCloud,
 // which keeps adding Finder metadata that codesign rejects.
+import { flipFuses, FuseV1Options, FuseVersion } from '@electron/fuses';
 import { packager } from '@electron/packager';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -52,7 +53,22 @@ const [outDir] = await packager({
 });
 
 const built = path.join(outDir, `${NAME}.app`);
-// Editing Info.plist invalidates Electron's signature; re-sign ad hoc.
+
+// The app holds camera, microphone and screen-recording grants. These fuses stop
+// other local programs from running the bundled Electron as plain Node.js
+// (ELECTRON_RUN_AS_NODE, NODE_OPTIONS, --inspect) and inheriting those grants,
+// and make it load its code only from the packaged asar archive.
+await flipFuses(path.join(built, 'Contents', 'MacOS', NAME), {
+  version: FuseVersion.V1,
+  [FuseV1Options.RunAsNode]: false,
+  [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+  [FuseV1Options.EnableNodeCliInspectArguments]: false,
+  [FuseV1Options.EnableCookieEncryption]: true,
+  [FuseV1Options.OnlyLoadAppFromAsar]: true,
+  [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+});
+
+// Editing Info.plist and the fuses invalidates Electron's signature; re-sign ad hoc.
 run('xattr', ['-cr', built]);
 run('codesign', ['--force', '--deep', '--sign', '-', built]);
 // An ad hoc signature's designated requirement defaults to the binary's cdhash,

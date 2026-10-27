@@ -97,7 +97,7 @@ npm run package
 El script:
 
 1. Compila el ayudante nativo `native/screen-access.swift` (ver más abajo).
-2. Empaqueta la app con su icono y la firma localmente.
+2. Empaqueta la app con su icono, activa los fusibles de seguridad de Electron y la firma localmente.
 3. La instala en `~/Applications/Screenova.app`.
 
 La firma es local ("ad hoc"): vale para tu Mac, pero no para repartir la app (para eso hace falta un certificado de Apple Developer y notarizarla). Está fijada al identificador `com.oxdabit.screenova`, y no a la huella del binario, para que macOS no olvide los permisos cada vez que vuelves a empaquetar.
@@ -115,6 +115,18 @@ Si el interruptor de Screenova aparece activado en Ajustes pero la app sigue dic
 ```bash
 tccutil reset ScreenCapture com.oxdabit.screenova
 ```
+
+## Seguridad
+
+Screenova tiene acceso a la cámara, el micrófono y la pantalla, así que está montada para que ese acceso no lo pueda aprovechar nadie más:
+
+- **Ventanas aisladas:** todas usan `contextIsolation` y `sandbox`, sin acceso a Node.js. Solo hablan con el proceso principal a través de una lista cerrada de canales, y el proceso principal rechaza cualquier mensaje que no venga de las páginas de la propia app.
+- **Permisos solo para la app:** cámara, micrófono, captura y pantalla completa se conceden únicamente a las páginas de Screenova, y la captura de pantalla solo a la ventana oculta que graba.
+- **Sin navegación ni ventanas externas**, y con una política de seguridad de contenidos (CSP) estricta en cada ventana: sin scripts ni estilos incrustados.
+- **Binario empaquetado blindado** con los fusibles de Electron: no se puede ejecutar como Node.js (`ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS`, `--inspect`), solo carga el código del archivo `app.asar` y comprueba su integridad. Además, la app se cierra si se abre con un puerto de depuración.
+- **Archivos de la biblioteca validados:** los identificadores de las grabaciones se comprueban antes de convertirse en rutas, así que un `.json` manipulado no puede hacer que la app lea o escriba fuera de `~/Movies/Screenova`.
+
+La firma local fijada al identificador tiene un coste: macOS concede los permisos a cualquier app firmada localmente con ese identificador. Para una herramienta personal es aceptable; para distribuirla, firma con un certificado de Apple Developer.
 
 ## Dónde se guardan los vídeos
 

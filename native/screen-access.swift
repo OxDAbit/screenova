@@ -1,9 +1,9 @@
 // Checks or requests macOS screen-recording access for the app that launches it.
 // Electron's capture APIs fail silently on recent macOS instead of showing the
-// system prompt, so Screenova runs this to get the app into the privacy list.
+// system permission dialog, so Screenova runs this to get the app into the privacy list.
 //
 //   screen-access check     prints "granted" or "denied"
-//   screen-access request   shows the system prompt if needed, then prints the status
+//   screen-access request   shows the permission dialog if needed, then prints the status
 import CoreGraphics
 
 let mode = CommandLine.arguments.dropFirst().first ?? "check"

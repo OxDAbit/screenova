@@ -478,13 +478,13 @@ function stopStream(stream) {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Each call supersedes the previous one; `token` lets a slow, stale request
+// Each call supersedes the previous one; the request counter lets a slow, stale call
 // drop its stream instead of overwriting the newer preview.
-let cameraToken = 0;
-let micToken = 0;
+let cameraRequest = 0;
+let micRequest = 0;
 
 async function startCameraPreview() {
-  const token = ++cameraToken;
+  const request = ++cameraRequest;
   const video = $('cam-preview');
   stopStream(previews.camera);
   previews.camera = null;
@@ -498,7 +498,7 @@ async function startCameraPreview() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { deviceId: { exact: $('camera').value }, width: { ideal: 640 }, height: { ideal: 480 } },
       });
-      if (token !== cameraToken) {
+      if (request !== cameraRequest) {
         stopStream(stream);
         return;
       }
@@ -507,7 +507,7 @@ async function startCameraPreview() {
       await video.play().catch(() => {});
       return;
     } catch (err) {
-      if (token !== cameraToken || err.name === 'NotAllowedError') return;
+      if (request !== cameraRequest || err.name === 'NotAllowedError') return;
       console.warn('Camera preview attempt failed:', err.name);
       await wait(300 * (attempt + 1));
     }
@@ -515,13 +515,13 @@ async function startCameraPreview() {
 }
 
 async function startMicMeter() {
-  const token = ++micToken;
+  const request = ++micRequest;
   stopMicMeter();
   if (!$('new-dialog').open || !$('mic').value) return;
   try {
     const id = $('mic').value;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: id === 'default' ? true : { deviceId: { exact: id } } });
-    if (token !== micToken) {
+    if (request !== micRequest) {
       stopStream(stream);
       return;
     }
@@ -552,8 +552,8 @@ function stopMicMeter() {
 }
 
 function stopPreviews() {
-  cameraToken += 1;
-  micToken += 1;
+  cameraRequest += 1;
+  micRequest += 1;
   stopStream(previews.camera);
   previews.camera = null;
   $('cam-preview').srcObject = null;

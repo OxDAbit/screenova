@@ -1,4 +1,4 @@
-/* 0xDA bit brand tokens, taken from oxdabit.com and the isotipo. */
+/* 0xDA bit brand colours and fonts, taken from oxdabit.com and the isotype. */
 @import url('../../node_modules/@fontsource-variable/epilogue/index.css');
 @import url('../../node_modules/@fontsource/sometype-mono/index.css');
 
@@ -15,7 +15,7 @@
   --grid: rgba(234, 241, 251, 0.045);
   --panel: rgba(15, 39, 71, 0.55);
 
-  /* Isotipo accents */
+  /* Isotype accent colours */
   --teal: #1d9e75;
   --mint: #5dcaa5;
   --coral: #f0997b;

@@ -10,9 +10,20 @@ function dir() {
   return path.join(app.getPath('videos'), APP_NAME);
 }
 
+const ID_PATTERN = /^rec-[a-z0-9-]+$/;
+const EXTENSIONS = new Set(['mp4', 'webm']);
+
+// IDs come from the renderer and from metadata files on disk, so both are
+// checked before they become part of a path.
+function isValidId(id) {
+  return typeof id === 'string' && ID_PATTERN.test(id);
+}
+
 function files(id, ext = 'mp4') {
+  if (!isValidId(id)) throw new Error('Grabación no válida.');
   const base = path.join(dir(), id);
-  return { video: `${base}.${ext}`, thumb: `${base}.jpg`, meta: `${base}.json` };
+  const safeExt = EXTENSIONS.has(ext) ? ext : 'mp4';
+  return { video: `${base}.${safeExt}`, thumb: `${base}.jpg`, meta: `${base}.json` };
 }
 
 async function ensureDir() {
@@ -52,10 +63,13 @@ async function toEntry(meta) {
 
 async function list() {
   await ensureDir();
-  const names = (await fs.readdir(dir())).filter((n) => n.endsWith('.json'));
-  const entries = await Promise.all(names.map(async (name) => {
+  const ids = (await fs.readdir(dir()))
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => name.slice(0, -'.json'.length))
+    .filter(isValidId);
+  const entries = await Promise.all(ids.map(async (id) => {
     try {
-      return await toEntry(JSON.parse(await fs.readFile(path.join(dir(), name), 'utf8')));
+      return await get(id);
     } catch {
       return null;
     }
@@ -63,8 +77,15 @@ async function list() {
   return entries.filter(Boolean).sort((a, b) => b.createdAt - a.createdAt);
 }
 
+// The file name is the source of truth for the ID; an `id` field inside the
+// JSON is ignored so an edited metadata file cannot point somewhere else.
+async function readMeta(id) {
+  const meta = JSON.parse(await fs.readFile(files(id).meta, 'utf8'));
+  return { ...meta, id };
+}
+
 async function get(id) {
-  return toEntry(JSON.parse(await fs.readFile(files(id).meta, 'utf8')));
+  return toEntry(await readMeta(id));
 }
 
 async function save(meta) {
@@ -76,7 +97,7 @@ async function save(meta) {
 const EDITABLE = ['title', 'trimStart', 'trimEnd'];
 
 async function update(id, patch) {
-  const meta = JSON.parse(await fs.readFile(files(id).meta, 'utf8'));
+  const meta = await readMeta(id);
   for (const key of EDITABLE) {
     if (key in patch) meta[key] = patch[key];
   }
@@ -93,4 +114,4 @@ async function remove(id) {
   }
 }
 
-module.exports = { dir, files, ensureDir, newId, defaultTitle, list, get, save, update, remove };
+module.exports = { dir, files, isValidId, ensureDir, newId, defaultTitle, list, get, save, update, remove };

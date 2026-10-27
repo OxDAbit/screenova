@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const { execFile } = require('node:child_process');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
   app, BrowserWindow, ipcMain, desktopCapturer, session, systemPreferences,
   globalShortcut, Tray, Menu, nativeImage, dialog, shell, screen,
@@ -15,20 +16,33 @@ const RENDERER = path.join(ROOT, 'src', 'renderer');
 const ASSETS = path.join(ROOT, 'assets');
 const PRELOAD = path.join(__dirname, 'preload.js');
 
+const RENDERER_URL = pathToFileURL(RENDERER + path.sep).href;
+
 const BUBBLE_SIZES = { s: 160, m: 240, l: 360 };
-const ID_PATTERN = /^rec-[a-z0-9-]+$/;
 
 app.setName(APP_NAME);
 
+// A packaged build must not expose a debugging port: whatever connects to it
+// could drive the app and use its camera, microphone and screen grants.
+const DEBUG_SWITCHES = ['remote-debugging-port', 'remote-debugging-pipe', 'inspect', 'inspect-brk'];
+if (app.isPackaged && DEBUG_SWITCHES.some((name) => app.commandLine.hasSwitch(name))) {
+  app.exit(1);
+}
+
 if (!app.requestSingleInstanceLock()) app.quit();
+
+// Only Screenova's own pages may use IPC or be granted device access.
+function isOwnPage(url) {
+  return typeof url === 'string' && url.startsWith(RENDERER_URL);
+}
 
 const win = { library: null, bubble: null, controls: null, countdown: null, recorder: null };
 
-// One recording session at a time. `token` changes whenever a session is
+// One recording session at a time. `sessionKey` changes whenever a session is
 // cancelled or restarted, so stale async steps can tell they are obsolete.
 const rec = {
   state: 'idle', // idle | countdown | recording | paused | saving
-  token: null,
+  sessionKey: null,
   config: null,
   display: null,
   id: null,
@@ -227,7 +241,7 @@ function broadcast() {
 
 function resetSession() {
   Object.assign(rec, {
-    state: 'idle', token: null, config: null, display: null, id: null, ext: 'mp4', tempPath: null, writer: null,
+    state: 'idle', sessionKey: null, config: null, display: null, id: null, ext: 'mp4', tempPath: null, writer: null,
     createdAt: 0, startedAt: 0, pausedAt: 0, pausedTotal: 0, durationMs: 0,
     countdownTimer: null, countdownDone: null, pendingReady: null, onDiscarded: null,
   });
@@ -315,8 +329,8 @@ function stopCountdown() {
 }
 
 async function startSession(config) {
-  const token = {};
-  rec.token = token;
+  const key = {};
+  rec.sessionKey = key;
   rec.config = config;
   rec.startedAt = 0;
   rec.pausedTotal = 0;
@@ -327,10 +341,10 @@ async function startSession(config) {
     await openWriter();
     await Promise.all([prepareRecorder(config), runCountdown(rec.display)]);
   } catch (err) {
-    if (rec.token === token) await abortSession(err.message);
+    if (rec.sessionKey === key) await abortSession(err.message);
     return;
   }
-  if (rec.token !== token || rec.state !== 'countdown') return;
+  if (rec.sessionKey !== key || rec.state !== 'countdown') return;
 
   rec.createdAt = Date.now();
   rec.startedAt = Date.now();
@@ -353,7 +367,7 @@ function discardRecorder() {
 }
 
 async function dropRecording() {
-  rec.token = null;
+  rec.sessionKey = null;
   rec.pendingReady = null;
   stopCountdown();
   await discardRecorder();
@@ -462,8 +476,9 @@ function onShortcutToggle() {
 const SETTINGS_PANES = { screen: 'ScreenCapture', camera: 'Camera', microphone: 'Microphone' };
 
 // Electron's capture APIs fail silently on recent macOS instead of showing the
-// screen-recording prompt, so a tiny native helper asks for it. Being a child of
-// the app, its request is attributed to Screenova and adds it to the privacy list.
+// screen-recording permission dialog, so a small native helper requests it.
+// As a child of the app, its request is attributed to Screenova and adds it to
+// the privacy list.
 const SCREEN_ACCESS = app.isPackaged
   ? path.join(process.resourcesPath, 'screen-access')
   : path.join(ROOT, 'native', 'bin', 'screen-access');
@@ -511,7 +526,16 @@ function fromRecorder(event) {
 }
 
 function registerIpc() {
-  ipcMain.handle('app:info', () => ({
+  // Every channel rejects messages from frames that are not Screenova's pages.
+  const handle = (channel, listener) => ipcMain.handle(channel, (event, ...args) => {
+    if (!isOwnPage(event.senderFrame?.url)) throw new Error('Remitente no permitido.');
+    return listener(event, ...args);
+  });
+  const on = (channel, listener) => ipcMain.on(channel, (event, ...args) => {
+    if (isOwnPage(event.senderFrame?.url)) listener(event, ...args);
+  });
+
+  handle('app:info', () => ({
     name: APP_NAME,
     version: app.getVersion(),
     shortcut: SHORTCUT_TOGGLE,
@@ -520,8 +544,8 @@ function registerIpc() {
     state: publicState(),
   }));
 
-  ipcMain.handle('sources:list', async () => {
-    // Ask once per launch; macOS only shows its prompt the first time anyway.
+  handle('sources:list', async () => {
+    // Request once per launch; macOS only shows its dialog the first time anyway.
     if (!screenRequested && permissionStatus().screen !== 'granted') {
       screenRequested = true;
       await requestScreenAccess();
@@ -545,15 +569,15 @@ function registerIpc() {
       });
   });
 
-  ipcMain.handle('permissions:check', () => permissionStatus());
-  ipcMain.handle('permissions:open-settings', async (_e, kind) => {
+  handle('permissions:check', () => permissionStatus());
+  handle('permissions:open-settings', async (_e, kind) => {
     // Makes sure Screenova is in the list before sending the user there.
     if (kind === 'screen') await requestScreenAccess();
     const pane = SETTINGS_PANES[kind];
     if (pane) shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?Privacy_${pane}`);
   });
 
-  ipcMain.handle('rec:start', async (_e, raw) => {
+  handle('rec:start', async (_e, raw) => {
     if (rec.state !== 'idle') return { ok: false, error: 'Ya hay una grabación en curso.' };
     const config = sanitizeConfig(raw);
     if (config.mode !== 'cam' && !config.sourceId) return { ok: false, error: 'Elige qué pantalla o ventana grabar.' };
@@ -571,7 +595,7 @@ function registerIpc() {
     return { ok: true };
   });
 
-  ipcMain.on('rec:ready', (event, details = {}) => {
+  on('rec:ready', (event, details = {}) => {
     if (!fromRecorder(event)) return;
     const mime = typeof details.mimeType === 'string' ? details.mimeType : '';
     rec.ext = /avc1|h264/.test(mime) ? 'mp4' : 'webm';
@@ -580,7 +604,7 @@ function registerIpc() {
     rec.pendingReady = null;
   });
 
-  ipcMain.on('rec:failed', (event, message) => {
+  on('rec:failed', (event, message) => {
     if (!fromRecorder(event)) return;
     const text = typeof message === 'string' ? message : 'Error desconocido del grabador.';
     if (rec.pendingReady) {
@@ -591,28 +615,28 @@ function registerIpc() {
     }
   });
 
-  ipcMain.on('rec:chunk', (event, data) => {
+  on('rec:chunk', (event, data) => {
     if (!fromRecorder(event) || !rec.writer || !(data instanceof Uint8Array)) return;
     rec.writer.write(Buffer.from(data.buffer, data.byteOffset, data.byteLength));
   });
 
-  ipcMain.on('rec:finished', (event) => {
+  on('rec:finished', (event) => {
     if (fromRecorder(event) && rec.state === 'saving') finishSession();
   });
 
-  ipcMain.on('rec:discarded', (event) => {
+  on('rec:discarded', (event) => {
     if (!fromRecorder(event)) return;
     rec.onDiscarded?.();
     rec.onDiscarded = null;
   });
 
-  ipcMain.on('rec:pause', () => rec.state === 'recording' && togglePause());
-  ipcMain.on('rec:resume', () => rec.state === 'paused' && togglePause());
-  ipcMain.on('rec:stop', () => stopSession());
-  ipcMain.on('rec:restart', () => restartSession());
-  ipcMain.on('rec:cancel', () => cancelSession());
+  on('rec:pause', () => rec.state === 'recording' && togglePause());
+  on('rec:resume', () => rec.state === 'paused' && togglePause());
+  on('rec:stop', () => stopSession());
+  on('rec:restart', () => restartSession());
+  on('rec:cancel', () => cancelSession());
 
-  ipcMain.on('bubble:size', (event, key) => {
+  on('bubble:size', (event, key) => {
     const w = alive('bubble');
     const size = BUBBLE_SIZES[key];
     if (!w || event.sender !== w.webContents || !size) return;
@@ -621,10 +645,10 @@ function registerIpc() {
     w.setBounds({ x: b.x, y: b.y + b.height - size, width: size, height: size });
   });
 
-  ipcMain.handle('library:list', () => store.list());
+  handle('library:list', () => store.list());
 
-  ipcMain.handle('library:update', (_e, id, patch = {}) => {
-    if (!ID_PATTERN.test(id)) throw new Error('Grabación no válida.');
+  handle('library:update', (_e, id, patch = {}) => {
+    if (!store.isValidId(id)) throw new Error('Grabación no válida.');
     const clean = {};
     if (typeof patch.title === 'string') clean.title = patch.title;
     if (Number.isFinite(patch.trimStart) && patch.trimStart >= 0) clean.trimStart = patch.trimStart;
@@ -632,8 +656,8 @@ function registerIpc() {
     return store.update(id, clean);
   });
 
-  ipcMain.handle('library:remove', async (event, id) => {
-    if (!ID_PATTERN.test(id)) throw new Error('Grabación no válida.');
+  handle('library:remove', async (event, id) => {
+    if (!store.isValidId(id)) throw new Error('Grabación no válida.');
     const entry = await store.get(id);
     const parent = BrowserWindow.fromWebContents(event.sender);
     const { response } = await dialog.showMessageBox(parent, {
@@ -649,15 +673,15 @@ function registerIpc() {
     return true;
   });
 
-  ipcMain.handle('library:reveal', async (_e, id) => {
-    if (!ID_PATTERN.test(id)) return;
+  handle('library:reveal', async (_e, id) => {
+    if (!store.isValidId(id)) return;
     shell.showItemInFolder(store.files(id).video);
   });
 
   // Native menu for a library card; resolves to the chosen action, which the
   // library then runs through the same flows as the player's buttons.
-  ipcMain.handle('library:card-menu', (event, id) => {
-    if (!ID_PATTERN.test(id)) return null;
+  handle('library:card-menu', (event, id) => {
+    if (!store.isValidId(id)) return null;
     const window = BrowserWindow.fromWebContents(event.sender);
     return new Promise((resolve) => {
       let choice = null;
@@ -679,13 +703,13 @@ function registerIpc() {
     });
   });
 
-  ipcMain.handle('library:reveal-folder', async () => {
+  handle('library:reveal-folder', async () => {
     await store.ensureDir();
     shell.openPath(store.dir());
   });
 
-  ipcMain.handle('library:export', async (event, id) => {
-    if (!ID_PATTERN.test(id)) throw new Error('Grabación no válida.');
+  handle('library:export', async (event, id) => {
+    if (!store.isValidId(id)) throw new Error('Grabación no válida.');
     const entry = await store.get(id);
     const safeName = entry.title.replace(/[\\/:*?"<>|]/g, '-');
     const parent = BrowserWindow.fromWebContents(event.sender);
@@ -759,13 +783,22 @@ app.whenReady().then(() => {
   const dockIcon = path.join(ASSETS, 'icon.png');
   if (process.platform === 'darwin' && fs.existsSync(dockIcon)) app.dock?.setIcon(dockIcon);
 
-  // 'fullscreen' is what the video player's full-screen button asks for.
+  // Device access and full screen (the video player's button) are granted to
+  // Screenova's own pages only; everything else is denied.
   const allowed = new Set(['media', 'display-capture', 'fullscreen']);
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(allowed.has(permission)));
-  session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+    callback(allowed.has(permission) && isOwnPage(wc.getURL()));
+  });
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => allowed.has(permission) && isOwnPage(wc?.getURL()));
 
-  // getDisplayMedia() in the recorder window resolves to the source picked in the library.
-  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+  // getDisplayMedia() resolves to the source picked in the library, and only
+  // for the hidden recorder window.
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    const recorderFrame = alive('recorder')?.webContents.mainFrame;
+    const fromRecorder = recorderFrame
+      && request.frame?.processId === recorderFrame.processId
+      && request.frame?.routingId === recorderFrame.routingId;
+    if (!fromRecorder) return callback({});
     const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
     const source = sources.find((s) => s.id === selectedSourceId) ?? sources.find((s) => s.id.startsWith('screen:'));
     callback(source ? { video: source } : {});
@@ -782,7 +815,7 @@ app.on('activate', () => {
   if (rec.state === 'idle') showLibrary();
 });
 
-// Stays in the menu bar after the library window closes, like a recorder should.
+// Screenova stays available from the menu bar after the library window closes.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

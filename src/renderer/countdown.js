@@ -17,7 +17,7 @@ function beep(frequency) {
     osc.start();
     osc.stop(audio.currentTime + 0.2);
   } catch {
-    // Audio is a nicety; the countdown works without it.
+    // Audio is optional; the countdown works without it.
   }
 }
 
