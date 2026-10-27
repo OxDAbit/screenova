@@ -6,7 +6,8 @@ const {
   app, BrowserWindow, ipcMain, desktopCapturer, session, systemPreferences,
   globalShortcut, Tray, Menu, nativeImage, dialog, shell, screen,
 } = require('electron');
-const { APP_NAME, SHORTCUT_TOGGLE, SHORTCUT_PAUSE, NAVY } = require('./brand');
+const { APP_NAME, SHORTCUT_TOGGLE, SHORTCUT_PAUSE, NAVY, TOPBAR, CREAM } = require('./brand');
+const platform = require('./platform');
 const store = require('./store');
 const media = require('./media');
 
@@ -19,6 +20,12 @@ const BUBBLE_SIZES = { s: 160, m: 240, l: 360 };
 const ID_PATTERN = /^rec-[a-z0-9-]+$/;
 
 app.setName(APP_NAME);
+
+// The smoke test uses a throwaway profile, so it neither collides with a running
+// Screenova (single-instance lock) nor leaves anything in the real one.
+if (process.env.SCREENOVA_SMOKE) {
+  app.setPath('userData', path.join(app.getPath('temp'), `screenova-smoke-profile-${process.pid}`));
+}
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -103,13 +110,22 @@ function showLibrary() {
     existing.focus();
     return existing;
   }
+  // The library draws its own top bar. macOS keeps its traffic lights inside it;
+  // Windows and Linux get their minimise/maximise/close buttons overlaid on the
+  // right of the same bar.
+  const titleBar = platform.isMac
+    ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 20, y: 22 } }
+    : {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { color: TOPBAR, symbolColor: CREAM, height: 68 },
+      icon: path.join(ASSETS, 'icon-square.png'),
+    };
   const w = createWindow('library.html', {
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 20, y: 22 },
+    ...titleBar,
     backgroundColor: NAVY,
     backgroundThrottling: true,
   });
@@ -459,8 +475,6 @@ function onShortcutToggle() {
 
 // ---------------------------------------------------------------- permissions
 
-const SETTINGS_PANES = { screen: 'ScreenCapture', camera: 'Camera', microphone: 'Microphone' };
-
 // Electron's capture APIs fail silently on recent macOS instead of showing the
 // screen-recording prompt, so a tiny native helper asks for it. Being a child of
 // the app, its request is attributed to Screenova and adds it to the privacy list.
@@ -514,6 +528,9 @@ function registerIpc() {
   ipcMain.handle('app:info', () => ({
     name: APP_NAME,
     version: app.getVersion(),
+    platform: process.platform,
+    labels: platform.labels,
+    home: app.getPath('home'),
     shortcut: SHORTCUT_TOGGLE,
     pauseShortcut: SHORTCUT_PAUSE,
     folder: store.dir(),
@@ -549,8 +566,8 @@ function registerIpc() {
   ipcMain.handle('permissions:open-settings', async (_e, kind) => {
     // Makes sure Screenova is in the list before sending the user there.
     if (kind === 'screen') await requestScreenAccess();
-    const pane = SETTINGS_PANES[kind];
-    if (pane) shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?Privacy_${pane}`);
+    const url = platform.settingsUrl(kind);
+    if (url) shell.openExternal(url);
   });
 
   ipcMain.handle('rec:start', async (_e, raw) => {
@@ -642,7 +659,7 @@ function registerIpc() {
       defaultId: 1,
       cancelId: 1,
       message: `¿Mover «${entry.title}» a la papelera?`,
-      detail: 'Podrás recuperarla desde la Papelera de macOS.',
+      detail: `Podrás recuperarla desde ${platform.labels.trash}.`,
     });
     if (response !== 0) return false;
     await store.remove(id);
@@ -670,7 +687,7 @@ function registerIpc() {
         { label: 'Renombrar', click: pick('rename') },
         { type: 'separator' },
         { label: 'Exportar MP4…', click: pick('export') },
-        { label: 'Mostrar en Finder', click: pick('reveal') },
+        { label: platform.labels.reveal, click: pick('reveal') },
         { type: 'separator' },
         { label: 'Mover a la papelera…', click: pick('remove') },
       ]);
@@ -738,16 +755,22 @@ function updateTray() {
     { label: `Salir de ${APP_NAME}`, role: 'quit' },
   );
   tray.setContextMenu(Menu.buildFromTemplate(template));
-  tray.setTitle(active ? (rec.state === 'paused' ? ' Pausa' : ' REC') : '');
+  // setTitle only shows text on macOS; elsewhere the tooltip carries the state.
+  if (platform.isMac) tray.setTitle(active ? (rec.state === 'paused' ? ' Pausa' : ' REC') : '');
+  else tray.setToolTip(active ? `${APP_NAME} · ${rec.state === 'paused' ? 'en pausa' : 'grabando'}` : APP_NAME);
 }
 
 function createTray() {
-  const iconPath = path.join(ASSETS, 'trayTemplate.png');
+  // macOS tints a black template image for light and dark menu bars; Windows and
+  // Linux show the icon as is, so they get the coloured mark.
+  const iconPath = path.join(ASSETS, platform.isMac ? 'trayTemplate.png' : 'tray.png');
   if (!fs.existsSync(iconPath)) return;
   const icon = nativeImage.createFromPath(iconPath);
-  icon.setTemplateImage(true);
+  if (platform.isMac) icon.setTemplateImage(true);
   tray = new Tray(icon);
   tray.setToolTip(APP_NAME);
+  // A left click on a Windows/Linux tray icon is expected to open the app.
+  if (!platform.isMac) tray.on('click', () => rec.state === 'idle' && showLibrary());
   updateTray();
 }
 
@@ -755,9 +778,12 @@ function createTray() {
 
 app.on('second-instance', () => showLibrary());
 
+// Groups the windows under one taskbar entry and names the app in Windows notifications.
+if (platform.isWindows) app.setAppUserModelId('com.oxdabit.screenova');
+
 app.whenReady().then(() => {
   const dockIcon = path.join(ASSETS, 'icon.png');
-  if (process.platform === 'darwin' && fs.existsSync(dockIcon)) app.dock?.setIcon(dockIcon);
+  if (platform.isMac && fs.existsSync(dockIcon)) app.dock?.setIcon(dockIcon);
 
   // 'fullscreen' is what the video player's full-screen button asks for.
   const allowed = new Set(['media', 'display-capture', 'fullscreen']);
@@ -772,6 +798,14 @@ app.whenReady().then(() => {
   });
 
   registerIpc();
+
+  // CI runs the packaged app with SCREENOVA_SMOKE=<results.json> to check the
+  // platform-specific pieces on a real Windows or Linux machine.
+  if (process.env.SCREENOVA_SMOKE) {
+    require('./smoke')(process.env.SCREENOVA_SMOKE, { createWindow, media });
+    return;
+  }
+
   createTray();
   globalShortcut.register(SHORTCUT_TOGGLE, onShortcutToggle);
   globalShortcut.register(SHORTCUT_PAUSE, togglePause);
@@ -782,9 +816,11 @@ app.on('activate', () => {
   if (rec.state === 'idle') showLibrary();
 });
 
-// Stays in the menu bar after the library window closes, like a recorder should.
+// Stays in the menu bar / system tray after the library window closes, like a
+// recorder should; the tray menu has the way out. Without a tray (some Linux
+// desktops) closing the last window quits.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  if (!platform.isMac && !tray && !process.env.SCREENOVA_SMOKE) app.quit();
 });
 
 app.on('will-quit', () => globalShortcut.unregisterAll());

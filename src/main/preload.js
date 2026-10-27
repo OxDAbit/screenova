@@ -17,6 +17,8 @@ const RECEIVE = new Set([
 ]);
 
 contextBridge.exposeInMainWorld('api', {
+  // Known synchronously, so pages can lay themselves out before the first paint.
+  platform: process.platform,
   invoke(channel, ...args) {
     if (!INVOKE.has(channel)) throw new Error(`Canal no permitido: ${channel}`);
     return ipcRenderer.invoke(channel, ...args);

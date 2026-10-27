@@ -1,0 +1,58 @@
+name: Multiplataforma
+
+# Validates the Windows build (and, later, Ubuntu) of Screenova on real machines:
+# installs, syntax-checks, packages the app and runs its built-in smoke test
+# (SCREENOVA_SMOKE) against the packaged executable. The installer and the
+# smoke report are uploaded as downloadable artifacts.
+on:
+  push:
+    branches:
+      - multiplaform-test
+      - 'multiplaform-test-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows · build + smoke test
+    if: ${{ !endsWith(github.ref_name, '-ubuntu') }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobar sintaxis
+        run: npm run check
+
+      - name: Empaquetar instalador
+        run: npm run dist:win
+
+      - name: Smoke test (app empaquetada)
+        shell: pwsh
+        run: |
+          $report = Join-Path $PWD 'dist\smoke-windows.json'
+          $env:SCREENOVA_SMOKE = $report
+          $app = Start-Process -FilePath 'dist\win-unpacked\Screenova.exe' -PassThru -Wait
+          if (Test-Path $report) { Get-Content $report } else { Write-Error 'La app no escribió el informe de smoke test' }
+          exit $app.ExitCode
+
+      - name: Publicar instalador e informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenova-windows
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/smoke-windows.json
+          if-no-files-found: warn

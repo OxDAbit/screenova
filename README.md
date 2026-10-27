@@ -116,9 +116,42 @@ Si el interruptor de Screenova aparece activado en Ajustes pero la app sigue dic
 tccutil reset ScreenCapture com.oxdabit.screenova
 ```
 
+## Windows
+
+```bash
+npm run dist:win
+```
+
+Genera en `dist/` el instalador `Screenova-Setup-<versión>.exe` y una versión portable `Screenova-<versión>-win-x64.zip`. Hay que ejecutarlo en Windows (o en GitHub Actions, ver más abajo), porque `npm install` descarga el ffmpeg del sistema donde se instala.
+
+Diferencias con macOS:
+
+- No hace falta permiso para grabar la pantalla. La cámara y el micrófono se controlan en **Configuración › Privacidad y seguridad**.
+- Los botones de minimizar, maximizar y cerrar se superponen a la derecha de la barra superior.
+- El icono vive en la bandeja del sistema: un clic abre la biblioteca y el clic derecho muestra el menú. Cerrar la ventana no cierra la app; para salir, usa **Salir de Screenova** en ese menú.
+- Los atajos son `Alt+Shift+R` (empezar / detener) y `Alt+Shift+P` (pausa).
+- La barra de control no sale en el vídeo en Windows 10 (versión 2004 o posterior) y Windows 11.
+- La exportación usa el codificador por hardware de Media Foundation (`h264_mf`) y, si no está disponible, x264.
+- El instalador no está firmado: la primera vez Windows SmartScreen muestra «Windows protegió su PC». Pulsa **Más información › Ejecutar de todas formas**.
+
+## Validación en GitHub Actions
+
+El flujo [`.github/workflows/multiplatform.yml`](.github/workflows/multiplatform.yml) se ejecuta en cada push a `multiplaform-test` y `multiplaform-test-*`. En una máquina Windows real:
+
+1. Instala las dependencias y comprueba la sintaxis (`npm run check`).
+2. Genera el instalador (`npm run dist:win`).
+3. Abre la app empaquetada en modo de autocomprobación (`SCREENOVA_SMOKE=<informe.json>`), que no graba nada y revisa: ffmpeg y la exportación (con el codificador usado), los formatos de `MediaRecorder`, que el sistema ofrece pantallas para capturar, que la biblioteca carga sin errores y con los textos de la plataforma, y el icono de la bandeja.
+4. Sube el instalador, el `.zip` y el informe como artefacto descargable del run.
+
+Para probar la autocomprobación en local:
+
+```bash
+SCREENOVA_SMOKE="$PWD/smoke.json" npx electron .
+```
+
 ## Dónde se guardan los vídeos
 
-En `~/Movies/Screenova/`. Cada grabación son tres archivos con el mismo identificador:
+En `~/Movies/Screenova/` en macOS y en la carpeta **Vídeos\Screenova** del usuario en Windows. Cada grabación son tres archivos con el mismo identificador:
 
 - `<id>.mp4`: el vídeo (`.webm` si se grabó con el códec alternativo).
 - `<id>.jpg`: la miniatura.
@@ -130,6 +163,8 @@ En `~/Movies/Screenova/`. Cada grabación son tres archivos con el mismo identif
 |---|---|
 | `npm start` | Abre la app en modo desarrollo |
 | `npm run package` | Crea, firma e instala `~/Applications/Screenova.app` |
+| `npm run dist:win` | Genera el instalador y la versión portable de Windows en `dist/` |
+| `npm run check` | Comprueba la sintaxis de todos los archivos JavaScript |
 | `npm run icons` | Regenera los iconos de la app y de la barra de menús a partir de `assets/mark.svg` |
 
 ## Estructura del proyecto
@@ -141,6 +176,8 @@ src/main/
   media.js         remux, miniaturas y exportación a MP4 con ffmpeg
   preload.js       API mínima, con lista blanca de canales, para las ventanas
   brand.js         nombre de la app y atajos de teclado
+  platform.js      textos y ajustes que cambian entre macOS, Windows y Linux
+  smoke.js         autocomprobación para CI (SCREENOVA_SMOKE)
 src/renderer/
   library.*        biblioteca, panel de nueva grabación y reproductor
   recorder.*       ventana oculta que captura y graba
@@ -153,7 +190,8 @@ native/
 assets/
   mark.svg         logo de Screenova
   isotipo.svg      isotipo de 0xDA bit
-  icon.*, trayTemplate*.png   iconos generados con `npm run icons`
+  icon.*, trayTemplate*.png   iconos de macOS generados con `npm run icons`
+  icon-square.png, tray*.png  iconos de Windows y Linux, generados igual
 scripts/
   package.mjs      empaquetado, firma e instalación
   build-native.mjs compila el ayudante nativo
@@ -162,7 +200,7 @@ scripts/
 
 ## Limitaciones conocidas
 
-- **Solo macOS.** Electron funciona también en Windows y Linux, pero la app no está adaptada ni probada allí.
+- **macOS y Windows.** Linux (Ubuntu) está pendiente de adaptar en la rama `multiplaform-test-ubuntu`.
 - **No graba el audio del sistema**, solo el micrófono.
 - **No hay enlaces para compartir:** todo se queda en local. Para compartir, exporta el MP4.
 - **App sin notarizar:** la firma local solo sirve en el Mac donde se empaqueta.

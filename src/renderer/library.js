@@ -1,5 +1,9 @@
 const $ = (id) => document.getElementById(id);
 
+// Set before the first paint so the top bar is laid out for this platform's
+// window buttons (traffic lights on the left on macOS, caption buttons on the right elsewhere).
+document.documentElement.dataset.platform = api.platform;
+
 const MODE_LABELS = { 'screen-cam': 'Pantalla + cámara', screen: 'Solo pantalla', cam: 'Solo cámara' };
 const MIN_CLIP = 0.5;
 
@@ -34,9 +38,17 @@ function savePrefs() {
   }
 }
 
+// macOS writes shortcuts with modifier symbols (⌥⇧R); Windows and Linux spell
+// them out (Alt+Shift+R), with Ctrl for CommandOrControl.
 function prettyShortcut(accel) {
+  if (api.platform !== 'darwin') return accel.replace('CommandOrControl', 'Ctrl');
   const map = { Alt: '⌥', Shift: '⇧', CommandOrControl: '⌘', Command: '⌘', Control: '⌃' };
   return accel.split('+').map((k) => map[k] ?? k).join('');
+}
+
+// Shortens the user's home folder to ~ on every platform.
+function shortPath(full) {
+  return info.home && full.startsWith(info.home) ? `~${full.slice(info.home.length)}` : full;
 }
 
 function clock(ms) {
@@ -99,7 +111,7 @@ function renderGrid() {
   const grid = $('grid');
   grid.replaceChildren();
   const n = recordings.length;
-  const folder = info.folder.replace(/^\/Users\/[^/]+/, '~');
+  const folder = shortPath(info.folder);
   $('lib-count').textContent = `${String(n).padStart(2, '0')} ${n === 1 ? 'vídeo' : 'vídeos'} · ${folder}`;
   $('empty').hidden = n > 0;
   grid.hidden = n === 0;
@@ -670,6 +682,7 @@ async function checkPermissions() {
 
 async function init() {
   info = await api.invoke('app:info');
+  $('reveal').textContent = info.labels.reveal;
   const toggle = prettyShortcut(info.shortcut);
   $('empty-shortcut').textContent = toggle;
   $('sc-toggle').textContent = toggle;

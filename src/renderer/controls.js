@@ -7,6 +7,12 @@ const STATES = ['countdown', 'recording', 'paused', 'saving'];
 let current = { state: 'countdown', elapsed: 0 };
 let receivedAt = performance.now();
 
+// Shortcut hints as each platform writes them (see brand.js for the accelerators).
+const KEYS = api.platform === 'darwin'
+  ? { pause: '⌥⇧P', stop: '⌥⇧R' }
+  : { pause: 'Alt+Shift+P', stop: 'Alt+Shift+R' };
+document.getElementById('stop').title = `Detener y guardar (${KEYS.stop})`;
+
 function format(ms) {
   const total = Math.floor(ms / 1000);
   const h = Math.floor(total / 3600);
@@ -30,7 +36,7 @@ api.on('rec:state', (next) => {
   for (const s of STATES) bar.classList.toggle(s, s === next.state);
   const paused = next.state === 'paused';
   pause.disabled = !['recording', 'paused'].includes(next.state);
-  pause.title = paused ? 'Reanudar (⌥⇧P)' : 'Pausar (⌥⇧P)';
+  pause.title = `${paused ? 'Reanudar' : 'Pausar'} (${KEYS.pause})`;
   pause.setAttribute('aria-label', paused ? 'Reanudar' : 'Pausar');
   pauseIcon.innerHTML = paused ? '<path d="M7 5l12 7-12 7z" />' : '<path d="M9 5v14M15 5v14" />';
   render();

@@ -28,6 +28,13 @@ const TRAY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"
   </g>
 </svg>`;
 
+// Windows and Linux icons fill their canvas (no macOS-style margin) and keep the
+// navy plate, so the mark reads on light and dark taskbars and system trays alike.
+const SQUARE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="200" fill="${NAVY}"/>
+  <g transform="translate(512 512) scale(10.5) translate(-50 -50)">${markBody}</g>
+</svg>`;
+
 // One offscreen window is reused for every icon size.
 let win = null;
 
@@ -63,6 +70,10 @@ async function main() {
   fs.writeFileSync(path.join(ASSETS, 'icon.png'), await render(APP_ICON, 1024));
   fs.writeFileSync(path.join(ASSETS, 'trayTemplate.png'), await render(TRAY_ICON, 18));
   fs.writeFileSync(path.join(ASSETS, 'trayTemplate@2x.png'), await render(TRAY_ICON, 36));
+  // electron-builder turns icon-square.png into the Windows .ico and Linux icons.
+  fs.writeFileSync(path.join(ASSETS, 'icon-square.png'), await render(SQUARE_ICON, 512));
+  fs.writeFileSync(path.join(ASSETS, 'tray.png'), await render(SQUARE_ICON, 16));
+  fs.writeFileSync(path.join(ASSETS, 'tray@2x.png'), await render(SQUARE_ICON, 32));
 
   // .icns for packaging, built with macOS's own iconutil.
   if (process.platform === 'darwin') {

@@ -26,8 +26,16 @@ function stopTracks() {
   tracks = [];
 }
 
+const PRIVACY_SETTINGS = {
+  darwin: 'Ajustes del Sistema › Privacidad y seguridad',
+  win32: 'Configuración de Windows › Privacidad y seguridad',
+};
+
 function describe(err) {
-  if (err?.name === 'NotAllowedError') return 'Permiso denegado. Revisa los permisos de pantalla, cámara y micrófono en Ajustes del Sistema.';
+  if (err?.name === 'NotAllowedError') {
+    const where = PRIVACY_SETTINGS[api.platform] ?? 'la configuración de privacidad del sistema';
+    return `Permiso denegado. Revisa los permisos de pantalla, cámara y micrófono en ${where}.`;
+  }
   if (err?.name === 'NotFoundError' || err?.name === 'OverconstrainedError') return 'No se encontró el dispositivo seleccionado.';
   if (err?.name === 'NotReadableError') return 'El dispositivo está en uso por otra aplicación.';
   return err?.message || String(err);

@@ -14,9 +14,12 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
+    "check": "node scripts/check.mjs",
     "icons": "electron scripts/build-icons.js",
     "postinstall": "node node_modules/electron/install.js",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "dist:linux": "electron-builder --linux --x64 --publish never"
   },
   "engines": {
     "node": ">=22"
@@ -28,10 +31,62 @@
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
-    "electron": "^45.0.0"
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0"
   },
   "allowScripts": {
     "electron": true,
-    "ffmpeg-static": true
+    "ffmpeg-static": true,
+    "electron-winstaller": false
+  },
+  "build": {
+    "appId": "com.oxdabit.screenova",
+    "productName": "Screenova",
+    "copyright": "© 2026 0xDA bit",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "!assets/icon.icns",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableCookieEncryption": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon-square.png",
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    }
   }
 }

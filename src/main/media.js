@@ -52,12 +52,16 @@ async function thumbnail(videoPath, thumbPath) {
   }
 }
 
-// Hardware H.264 first (fast, light on the CPU), x264 if VideoToolbox refuses.
-const ENCODERS = [
-  ['-c:v', 'h264_videotoolbox', '-b:v', '8M', '-allow_sw', '1'],
-  ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20'],
-];
+// The platform's hardware H.264 encoder first (fast, light on the CPU): VideoToolbox
+// on macOS, Media Foundation on Windows. x264 is the software fallback everywhere.
+const X264 = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20'];
+const HARDWARE = {
+  darwin: ['-c:v', 'h264_videotoolbox', '-b:v', '8M', '-allow_sw', '1'],
+  win32: ['-c:v', 'h264_mf', '-b:v', '8M', '-rate_control', 'cbr'],
+};
+const ENCODERS = [HARDWARE[process.platform], X264].filter(Boolean);
 
+// Resolves to the video encoder that was used ('copy' when nothing was re-encoded).
 async function exportMp4(videoPath, destPath, { start = 0, end = null, durationSec }, onProgress) {
   const length = (end ?? durationSec) - start;
   const output = ['-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', destPath];
@@ -65,7 +69,7 @@ async function exportMp4(videoPath, destPath, { start = 0, end = null, durationS
   // An untrimmed H.264 recording only needs its container copied.
   if (start <= 0 && end === null && videoPath.endsWith('.mp4')) {
     await run(['-i', videoPath, '-c:v', 'copy', ...output], { totalSec: length, onProgress });
-    return;
+    return 'copy';
   }
 
   const input = [];
@@ -78,7 +82,7 @@ async function exportMp4(videoPath, destPath, { start = 0, end = null, durationS
   for (const encoder of ENCODERS) {
     try {
       await run([...input, ...encoder, ...video, ...output], { totalSec: length, onProgress });
-      return;
+      return encoder[1];
     } catch (err) {
       lastError = err;
     }
@@ -86,4 +90,15 @@ async function exportMp4(videoPath, destPath, { start = 0, end = null, durationS
   throw lastError;
 }
 
-module.exports = { finalize, exportMp4 };
+// Builds a short synthetic H.264 + AAC clip, fragmented like MediaRecorder's
+// output; the smoke test uses it so it needs no camera or screen.
+async function makeTestClip(destPath, seconds = 3) {
+  await run([
+    '-f', 'lavfi', '-i', `testsrc2=size=1280x720:rate=30:duration=${seconds}`,
+    '-f', 'lavfi', '-i', `sine=frequency=440:duration=${seconds}`,
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac',
+    '-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4', destPath,
+  ]);
+}
+
+module.exports = { finalize, exportMp4, makeTestClip, ffmpegPath };
