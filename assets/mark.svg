@@ -1,0 +1,11 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Screenova mark: the record button inside the 0xDA bit isotipo ring. -->
+  <g transform="translate(50, 50)">
+    <circle cx="0" cy="0" r="34" fill="none" stroke="#EFEBE4" stroke-width="3" opacity="0.35"/>
+    <path d="M 0,-34 A 34,34 0 0,1 24,-24" fill="none" stroke="#F0997B" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 24,24 A 34,34 0 0,1 0,34" fill="none" stroke="#EF9F27" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="34" cy="0" r="2.6" fill="#EF9F27"/>
+    <circle cx="0" cy="0" r="21" fill="#F0705A"/>
+    <circle cx="0" cy="0" r="21" fill="none" stroke="#EFEBE4" stroke-width="1.5" opacity="0.25"/>
+  </g>
+</svg>

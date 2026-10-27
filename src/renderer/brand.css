@@ -1,0 +1,155 @@
+/* 0xDA bit brand tokens, taken from oxdabit.com and the isotipo. */
+@import url('../../node_modules/@fontsource-variable/epilogue/index.css');
+@import url('../../node_modules/@fontsource/sometype-mono/index.css');
+
+:root {
+  --navy: #1c3f6e;
+  --navy-deep: #16345c;
+  --navy-ink: #0f2747;
+  --cream: #efebe4;
+  --butter: #f3e5ab;
+  --mist: #9fb0c6;
+  --steel: #c9cfd6;
+  --line: rgba(234, 241, 251, 0.16);
+  --line-strong: rgba(234, 241, 251, 0.32);
+  --grid: rgba(234, 241, 251, 0.045);
+  --panel: rgba(15, 39, 71, 0.55);
+
+  /* Isotipo accents */
+  --teal: #1d9e75;
+  --mint: #5dcaa5;
+  --coral: #f0997b;
+  --amber: #ef9f27;
+  --rec: #f0705a;
+
+  --font-display: 'Epilogue Variable', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Sometype Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-display);
+  color: var(--cream);
+  background: var(--navy);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.blueprint {
+  background-color: var(--navy);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mist);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+:focus-visible {
+  outline: 2px solid var(--butter);
+  outline-offset: 2px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+  background: rgba(234, 241, 251, 0.08);
+  border-color: var(--cream);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--butter);
+  border-color: var(--butter);
+  color: var(--navy-ink);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #f8edc2;
+  border-color: #f8edc2;
+}
+
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--coral);
+  color: var(--coral);
+  background: rgba(240, 153, 123, 0.08);
+}
+
+.btn-icon {
+  width: 38px;
+  padding: 0;
+  justify-content: center;
+}
+
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rec);
+  flex: none;
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: var(--cream);
+}
+
+svg.icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}

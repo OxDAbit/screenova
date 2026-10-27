@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; font-src 'self' file: data:; img-src 'self' file: data:; media-src 'self' file: blob: mediastream:" />
+  <title>Screenova</title>
+  <link rel="stylesheet" href="brand.css" />
+  <link rel="stylesheet" href="library.css" />
+</head>
+<body class="blueprint">
+  <header class="topbar">
+    <div class="brand">
+      <img src="../../assets/isotipo.svg" alt="" class="brand-mark" />
+      <span class="wordmark">Screen<span>ova</span></span>
+      <span class="mono brand-tag">by 0xDA_bit</span>
+    </div>
+    <div class="top-actions">
+      <button class="btn btn-icon" id="open-folder" type="button" title="Abrir carpeta de grabaciones" aria-label="Abrir carpeta de grabaciones">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+      </button>
+      <button class="btn btn-primary" id="new-rec" type="button"><span class="rec-dot"></span>Nueva grabación</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" hidden>
+    <span id="banner-text"></span>
+    <button class="btn" id="banner-action" type="button">Abrir Ajustes</button>
+  </div>
+
+  <main>
+    <section id="view-library" class="view">
+      <div class="lib-head">
+        <h1>Tus <em>grabaciones</em></h1>
+        <div class="mono" id="lib-count"></div>
+      </div>
+      <div class="grid" id="grid"></div>
+
+      <div class="empty" id="empty" hidden>
+        <img src="../../assets/mark.svg" alt="" class="empty-mark" />
+        <h2>Graba tu primera <em>toma</em></h2>
+        <p>Pantalla, cámara y micrófono en un solo clic. Tus vídeos se guardan en tu Mac, sin subir nada a ninguna parte.</p>
+        <button class="btn btn-primary" id="empty-new" type="button"><span class="rec-dot"></span>Nueva grabación</button>
+        <p class="mono">Atajo global <kbd id="empty-shortcut"></kbd></p>
+      </div>
+    </section>
+
+    <section id="view-player" class="view" hidden>
+      <div class="player-head">
+        <button class="btn" id="back" type="button">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>Biblioteca
+        </button>
+        <div class="player-title">
+          <input id="title" class="title-input" type="text" maxlength="200" aria-label="Título de la grabación" spellcheck="false" />
+          <div class="mono" id="player-meta"></div>
+        </div>
+      </div>
+
+      <div class="player-body">
+        <div class="stage">
+          <span class="tick tl"></span><span class="tick tr"></span><span class="tick bl"></span><span class="tick br"></span>
+          <video id="video" controls preload="metadata"></video>
+        </div>
+
+        <aside class="side">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="mono">Recorte</span>
+              <span class="mono" id="trim-length"></span>
+            </div>
+            <div class="timeline" id="timeline">
+              <div class="tl-track"></div>
+              <div class="tl-sel" id="tl-sel"></div>
+              <div class="tl-playhead" id="tl-playhead"></div>
+              <button class="tl-handle" id="h-start" type="button" role="slider" aria-label="Inicio del recorte"></button>
+              <button class="tl-handle" id="h-end" type="button" role="slider" aria-label="Fin del recorte"></button>
+            </div>
+            <div class="trim-readout">
+              <div><span class="mono">Inicio</span><strong id="t-start">00:00.0</strong></div>
+              <div><span class="mono">Fin</span><strong id="t-end">00:00.0</strong></div>
+            </div>
+            <div class="btn-row">
+              <button class="btn" id="mark-in" type="button" title="Usar la posición actual como inicio">Inicio aquí</button>
+              <button class="btn" id="mark-out" type="button" title="Usar la posición actual como fin">Fin aquí</button>
+            </div>
+            <div class="btn-row">
+              <button class="btn" id="trim-reset" type="button">Restablecer</button>
+              <button class="btn" id="trim-save" type="button" disabled>Guardar recorte</button>
+            </div>
+            <p class="hint">El recorte no modifica el archivo original: se aplica al reproducir y al exportar.</p>
+          </div>
+
+          <div class="panel">
+            <span class="mono">Exportar</span>
+            <button class="btn btn-primary wide" id="export" type="button">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>Exportar MP4
+            </button>
+            <div class="progress" id="export-progress" hidden><div id="export-fill"></div></div>
+            <div class="btn-row">
+              <button class="btn" id="reveal" type="button">Mostrar en Finder</button>
+              <button class="btn btn-danger" id="remove" type="button">Papelera</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <dialog class="sheet" id="new-dialog" aria-labelledby="new-title">
+    <form id="new-form" method="dialog">
+      <header class="sheet-head">
+        <h2 id="new-title">Nueva <em>grabación</em></h2>
+        <button class="btn btn-icon" id="new-close" type="button" value="cancel" aria-label="Cerrar">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </header>
+
+      <div class="field">
+        <span class="mono">Modo</span>
+        <div class="seg" role="radiogroup" aria-label="Modo de grabación">
+          <label><input type="radio" name="mode" value="screen-cam" /><span>Pantalla + cámara</span></label>
+          <label><input type="radio" name="mode" value="screen" /><span>Solo pantalla</span></label>
+          <label><input type="radio" name="mode" value="cam" /><span>Solo cámara</span></label>
+        </div>
+      </div>
+
+      <div class="field" id="source-field">
+        <div class="field-head">
+          <span class="mono">Qué grabar</span>
+          <div class="tabs" role="tablist">
+            <button type="button" role="tab" data-kind="screen" aria-selected="true">Pantallas</button>
+            <button type="button" role="tab" data-kind="window" aria-selected="false">Ventanas</button>
+          </div>
+          <button class="btn btn-icon small" id="refresh" type="button" title="Actualizar" aria-label="Actualizar fuentes">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></svg>
+          </button>
+        </div>
+        <div class="sources" id="sources"></div>
+      </div>
+
+      <div class="devices">
+        <div class="field" id="camera-field">
+          <span class="mono">Cámara</span>
+          <div class="cam-row">
+            <div class="cam-preview"><video id="cam-preview" muted autoplay playsinline></video></div>
+            <div class="cam-controls">
+              <select id="camera" aria-label="Cámara"></select>
+              <div class="seg small" id="bubble-size" role="radiogroup" aria-label="Tamaño de la burbuja">
+                <label><input type="radio" name="bubble" value="s" /><span>S</span></label>
+                <label><input type="radio" name="bubble" value="m" /><span>M</span></label>
+                <label><input type="radio" name="bubble" value="l" /><span>L</span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <span class="mono">Micrófono</span>
+          <select id="mic" aria-label="Micrófono"></select>
+          <div class="meter" aria-hidden="true"><div id="meter-fill"></div></div>
+        </div>
+      </div>
+
+      <p class="form-error" id="form-error" hidden></p>
+
+      <footer class="sheet-foot">
+        <span class="mono"><kbd id="sc-toggle"></kbd> empezar / detener · <kbd id="sc-pause"></kbd> pausa</span>
+        <button class="btn btn-primary" id="start" type="submit"><span class="rec-dot"></span>Empezar a grabar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="library.js"></script>
+</body>
+</html>
